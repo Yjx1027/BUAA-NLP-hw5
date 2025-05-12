@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>合成大西瓜 - 自定义版</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    body {
+      margin: 0;
+      font-family: sans-serif;
+      background: #f2f2f2;
+      text-align: center;
+    }
+    h1 {
+      margin: 20px 0;
+      font-size: 24px;
+    }
+    canvas {
+      background: #fff;
+      display: block;
+      margin: 0 auto;
+      border: 2px solid #ccc;
+    }
+    #nextBallPreview {
+      margin: 10px auto;
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      overflow: hidden;
+      border: 2px solid #999;
+      background-color: #fff;
+    }
+    #nextBallPreview img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      border-radius: 50%;
+    }
+    #scoreBoard {
+      margin: 10px;
+      font-size: 18px;
+      font-weight: bold;
+    }
+    #gameOver {
+      font-size: 28px;
+      color: red;
+      display: none;
+    }
+    #restartButton {
+      display: none;
+      margin: 10px auto;
+      padding: 10px 20px;
+      font-size: 16px;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <h1>合成大西瓜 - 自定义图版</h1>
+  <div id="scoreBoard">得分：0</div>
+  <div>下一个：</div>
+  <div id="nextBallPreview"></div>
+  <canvas id="gameCanvas" width="375" height="600"></canvas>
+  <div id="gameOver">游戏结束</div>
+  <button id="restartButton">重新开始</button>
+
+  <script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+    const preview = document.getElementById("nextBallPreview");
+    const scoreBoard = document.getElementById("scoreBoard");
+    const gameOverText = document.getElementById("gameOver");
+    const restartButton = document.getElementById("restartButton");
+
+    const gravity = 0.2;
+    const bounce = 0.6;
+    const images = [];
+    const radiusList = [20, 28, 36, 48, 60, 80];
+    const imagePaths = [
+      "images/item1.png",
+      "images/item2.png",
+      "images/item3.png",
+      "images/item4.png",
+      "images/item5.png",
+      "images/item6.png"
+    ];
+    const scoreTable = [10, 20, 40, 80, 160, 320];
+
+    let score = 0;
+    let gameOver = false;
+    let balls = [];
+    let nextType = 0;
+
+    class Ball {
+      constructor(x, y, type) {
+        this.x = x;
+        this.y = y;
+        this.vx = 0;
+        this.vy = 0;
+        this.type = type;
+        this.radius = radiusList[type];
+        this.image = images[type];
+        this.merged = false;
+      }
+
+      update() {
+        this.vy += gravity;
+        this.y += this.vy;
+        this.x += this.vx;
+
+        // 下边界碰撞
+        if (this.y + this.radius > canvas.height) {
+          this.y = canvas.height - this.radius;
+          this.vy *= -bounce;
+        }
+
+        // 左边界碰撞
+        if (this.x - this.radius < 0) {
+          this.x = this.radius; // 确保小球不会超出左边界
+          this.vx *= -1; // 反弹
+        }
+
+        // 右边界碰撞
+        if (this.x + this.radius > canvas.width) {
+          this.x = canvas.width - this.radius; // 确保小球不会超出右边界
+          this.vx *= -1; // 反弹
+        }
+
+        // 上边界碰撞（游戏结束）
+        if (this.y - this.radius <= 0) {
+          gameOver = true;
+          gameOverText.style.display = "block";
+          restartButton.style.display = "block";
+        }
+      }
+
+      draw() {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.closePath();
+        ctx.clip();
+        ctx.drawImage(
+          this.image,
+          this.x - this.radius,
+          this.y - this.radius,
+          this.radius * 2,
+          this.radius * 2
+        );
+        ctx.restore();
+      }
+
+      isCollidingWith(other) {
+        const dx = this.x - other.x;
+        const dy = this.y - other.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        return distance < this.radius + other.radius;
+      }
+    }
+
+    function loadImages(paths, callback) {
+      let loaded = 0;
+      paths.forEach((path, index) => {
+        const img = new Image();
+        img.src = path;
+        img.onload = () => {
+          images[index] = img;
+          loaded++;
+          if (loaded === paths.length) callback();
+        };
+      });
+    }
+
+    function updatePreview() {
+      preview.innerHTML = '';
+      const img = document.createElement('img');
+      img.src = imagePaths[nextType];
+      preview.appendChild(img);
+    }
+
+    function generateNextType() {
+      return Math.floor(Math.random() * 2);
+    }
+
+    function spawnBallAt(x) {
+      if (gameOver) return;
+      const clampedX = Math.max(radiusList[nextType], Math.min(x, canvas.width - radiusList[nextType]));
+      const ball = new Ball(clampedX, 50, nextType);
+      balls.push(ball);
+      nextType = generateNextType();
+      updatePreview();
+    }
+
+    canvas.addEventListener("click", (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const clickX = e.clientX - rect.left;
+      spawnBallAt(clickX);
+    });
+
+    restartButton.addEventListener("click", () => {
+      score = 0;
+      gameOver = false;
+      balls = [];
+      gameOverText.style.display = "none";
+      restartButton.style.display = "none";
+      scoreBoard.textContent = '得分：0';
+      nextType = generateNextType();
+      updatePreview();
+      animate();
+    });
+
+    function mergeBalls() {
+      for (let i = 0; i < balls.length; i++) {
+        for (let j = i + 1; j < balls.length; j++) {
+          const b1 = balls[i];
+          const b2 = balls[j];
+
+          if (
+            b1.type === b2.type &&
+            b1.isCollidingWith(b2) &&
+            !b1.merged && !b2.merged &&
+            b1.type < radiusList.length - 1
+          ) {
+            const newX = (b1.x + b2.x) / 2;
+            const newY = (b1.y + b2.y) / 2;
+            const newBall = new Ball(newX, newY, b1.type + 1);
+            newBall.vy = (b1.vy + b2.vy) / 2;
+            newBall.vx = (b1.vx + b2.vx) / 2;
+
+            b1.merged = true;
+            b2.merged = true;
+
+            score += scoreTable[b1.type + 1] || 0;
+            scoreBoard.textContent = '得分：' + score;
+
+            balls.splice(j, 1);
+            balls.splice(i, 1);
+            balls.push(newBall);
+            return;
+          }
+        }
+      }
+
+      balls = balls.filter(b => !b.merged);
+    }
+
+    function resolveCollisions() {
+      for (let i = 0; i < balls.length; i++) {
+        for (let j = i + 1; j < balls.length; j++) {
+          const a = balls[i];
+          const b = balls[j];
+
+          const dx = b.x - a.x;
+          const dy = b.y - a.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          const minDist = a.radius + b.radius;
+
+          if (dist < minDist) {
+            const angle = Math.atan2(dy, dx);
+            const overlap = (minDist - dist) / 2;
+
+            const offsetX = Math.cos(angle) * overlap;
+            const offsetY = Math.sin(angle) * overlap;
+
+            a.x -= offsetX;
+            a.y -= offsetY;
+            b.x += offsetX;
+            b.y += offsetY;
+
+            const totalMass = 2;
+            const vxTotal = a.vx - b.vx;
+            const vyTotal = a.vy - b.vy;
+            a.vx -= vxTotal / totalMass;
+            a.vy -= vyTotal / totalMass;
+            b.vx += vxTotal / totalMass;
+            b.vy += vyTotal / totalMass;
+          }
+        }
+      }
+    }
+
+    function animate() {
+      if (gameOver) return;
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      for (const ball of balls) {
+        ball.update();
+      }
+
+      resolveCollisions();
+      mergeBalls();
+
+      for (const ball of balls) {
+        ball.draw();
+      }
+
+      requestAnimationFrame(animate);
+    }
+
+    loadImages(imagePaths, () => {
+      nextType = generateNextType();
+      updatePreview();
+      animate();
+    });
+  </script>
+</body>
+</html>
